@@ -1,0 +1,1037 @@
+
+<!DOCTYPE html>
+
+<html lang="fr">
+
+<head>
+
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <meta name="viewport" content="width=device-width">
+
+    <title>Pomodoro</title>
+
+
+
+    <script>
+
+        /** Pomodoro.js
+        *   Source: openclassroom
+        *   MAJ:2018-10-26 Marc
+        *   Perfectionné le 17-01-2019
+        **/
+        ///////       CE QU'ON PEUT AMELIORER                            ///////
+        ////////////////////////////////////////////////////////////////////////
+        /*  - Le design des boutons! */
+
+        ///////             TESTS                                        ///////
+        ////////////////////////////////////////////////////////////////////////
+        /*  - l'horloge fonctionne-t-elle?
+         *  - le bloc d'affichage de fin s'affiche-t-il?
+         *  - peut-on enregistrer un post-it?
+         *  - peut-on effacer le post-it?
+         *  - le pomodoro fonctionne-t-il avec un post-it?  */
+
+        /////// LES FONCTIONS EN JAVASCRIPT 2019                         ///////
+        ////////////////////////////////////////////////////////////////////////
+        /** Variables globales    */
+        var dureeInitiale           = 0;
+        var dureeInitialeFixe       = 0;//Pour affichage fixe dans le titre
+        var dureeInitialeFixeConnue = 0;
+        var dureeTotale             = 0;//Pour calculer % et barre de progression
+        var dureeVariable           = 0;//Duréé variable du compte à rebours
+        var ecartMinutes            = 0;
+        var ecartHeures             = 0;
+        var heureActuelle           = 0;
+        var heureFormulaire         = 0;
+		var heureChoisie            = 0;
+        var horlogeFlag             = false;
+        var minutesActuelles        = 0;
+        var minutesFormulaire       = 0;
+        var saveTime                = 0;
+        var saveDureeInitiale       = 0;
+		var tempsEcoule             = 0;
+        var valeurPomodoroParDefaut = 25;
+		var valeurDuCompteArebours  = 0;
+		
+        /** Les ids
+        *   HM 2019-1-17
+        *   Liste des ids utilisés dans l'application
+        **/
+        // Compte à rebourds:    id = "compteArebours"
+        // Barre de progression: id = "barre"
+
+		
+
+         /** start(id)
+         *  Fonction qui démarre l'application. Elle est activée par le bouton "Lancer" dans la page html
+         *
+         *  C'est ici que l'on sauvegarde la durée initiale fixe qui restera dans le titre. Elle ne doit pas changer.
+         *  HM janvier 2019
+         */
+        function start(id, dureeInitialeFixeConnue) {
+
+            // Est-ce qu'une heure précise a été choisie? Si oui, on récupère l'heure choisie
+            heureChoisie = document.getElementById("choixHeure").value;
+            heureSeule = parseInt(heureChoisie[0] + heureChoisie[1]);
+            minutesSeules = parseInt(heureChoisie[3] + heureChoisie[4]);
+            heureActuelle = parseInt(heureActuelle);
+            minutesActuelles = parseInt(minutesActuelles);
+            ecartHeures = heureSeule - heureActuelle;
+            ecartMinutes = minutesSeules - minutesActuelles;
+
+            if(ecartHeures > 0){
+                ecartHeuresEnSecondes = ecartHeures*3600;
+                ecartMinutesEnSecondes = ecartMinutes*60;
+                dureeInitialeFixe = ecartHeuresEnSecondes + ecartMinutesEnSecondes;
+                dureeInitialeFixe = dureeInitialeFixe/60;//on envoie les données en mn depuis les boutons
+                dureeInitialeFixeConnue = dureeInitialeFixe;
+            }
+
+            //dureeInitialeFixeConnue est-elle définie?
+            if(typeof dureeInitialeFixeConnue !== "undefined"){
+                dureeInitialeFixeConnue = dureeInitialeFixeConnue;
+            }
+            else {
+                dureeInitialeFixeConnue = 0;
+            }
+
+            //Actions d'affichage, masquage des boutons et mise à zéro du décompte
+            actionsSecondaires(); //à la fin de la fonction start
+
+			// dureeInitialeFixe a-t-elle été renseignée? (choix d'une heure, choixHeure())
+			if(dureeInitialeFixeConnue === 0)
+				//dureeInitialeFixe vaut 0, non renseignée, on récupère la valeur saisie au clavier dans la case input
+				dureeInitialeFixe = document.getElementById(id).value;
+			else
+				dureeInitialeFixe = dureeInitialeFixeConnue;
+
+			intrus = [",", ";"];
+			intrus.forEach(function(element) {
+				//On remplace les intrus par un point: indexOf compte les virgules dans la chaîne de caractères
+				var repere = (dureeInitialeFixe.toString()).indexOf(element);
+
+				if(dureeInitialeFixe.toString() === element){
+					alert("Renseignez un chiffre");
+					document.getElementById(id).value = valeurPomodoroParDefaut;
+					//stop();
+					return false;
+				} else if( repere > 0){
+						dureeInitialeFixe = dureeInitialeFixe.replace(element, ".");
+						dureeInitialeFixe = parseFloat(dureeInitialeFixe);
+				}
+			});
+
+			dureeInitiale = dureeInitialeFixe;
+
+			//Si ce sont des minutes (id = dureeVariable) on les convertit en secondes
+			if(id !== "10sec"){
+				document.getElementById("dureeVariable").value = dureeInitiale;
+				dureeInitiale = dureeInitiale*60;
+			}
+			else {
+				//On modifie la valeur de l'input si c'est un bouton qui a été utilisé
+				document.getElementById("dureeVariable").value = dureeInitiale/60;
+			}
+			//On affiche la durée initiale fixe dans le titre après l'avoir convertie en h, m, secondes.
+			dureeInitialeAffichee = convertisseurSecondesEnHMS(dureeInitiale, "lettres");
+			document.getElementById("dureeChoisie").innerHTML = "de " + dureeInitialeAffichee;
+
+
+            //On vérifie qu'on a bien renseigné un nombre
+            if(isNaN(dureeInitiale)){
+                alert("Merci de renseigner un nombre.");
+                stop();
+                return;
+            }
+
+            //On transforme la durée en nombre
+            dureeTotale = parseInt(dureeInitiale);
+
+            //On lance le décompteur. DureeTotale sert aux calculs de la barre de progression et aux pourcentages
+            compteArebours(dureeInitiale, dureeTotale);
+
+            /** ACTIONS SECONDAIRES DE LA FONCTION START: afficher/masquer boutons, compteurs à zéro */
+            //Actions d'affichage, masquage et mise à zéro du décompte
+            function actionsSecondaires(){
+                //On masque le bloc d'affichage de la fin et le bouton lancer
+                masquer("blocAffichageDeFin");
+                afficherInline("boutonStop");
+                afficherInline("compteArebours");
+                afficherInline("dureeChoisie");
+
+                masquer("aide");
+
+                //On arrête le décompte en cours s'il existe
+                if (typeof timeout !== "undefined")
+                    clearTimeout(timeout);
+            }
+        } //Fin de la fonction start()
+
+        /* Fonction stop() créée pour réinitialisée la durée initiale */
+        function stop(){
+            //On efface tout
+            masquer("boutonStop");
+            horlogeFlag = true;
+            dureeVariable = 0;
+            saveDureeInitiale = 0;
+            saveTime = 0;
+            masquer("aide");
+            masquer("blocAffichageDeFin");
+            if(typeof timeout !== "undefined")
+                clearTimeout(timeout);//On arrête le décompte
+            toutEffacer("barre");
+            toutEffacer("pourcentage");			
+            document.getElementById("dureeVariable").value = valeurPomodoroParDefaut;
+            masquer("boutonEnregistrementPostit");
+
+        }
+
+        /** Tout effacer **/
+        function toutEffacer(id){
+
+            dureeInitialeFixe = 0;//Pour affichage fixe dans le titre
+            dureeTotale       = 0;//Pour calculer % et barre de progression
+            dureeVariable     = 0;//Duréé variable du compte à rebours
+            saveTime          = 0;
+            saveDureeInitiale = 0;
+            dureeVariable     = 0;
+            dureeInitiale     = 0;
+            heureFormulaire   = 0;
+            minutesFormulaire = 0;
+            horlogeFlag       = false;
+            heureActuelle     = 0;
+            minutesActuelles  = 0;
+            ecartHeures       = 0;
+            ecartMinutes      = 0;
+            dureeInitialeFixeConnue = 0;
+            masquer("compteArebours");
+            masquer("dureeChoisie");
+            miseAzero("barre");
+            tempsEcoule = 0;
+            document.getElementById(id).innerHTML = "";
+            }
+
+        function compteArebours(valeur, dureeTotaleSaved) {
+
+            //Déclaration des variables
+            //On confirme la transformation de la durée totale en nombre
+            var dureeTotale = parseInt(dureeTotaleSaved);
+
+            //On récupère la valeur de la durée
+            dureeVariable = valeur;
+            secondes = dureeVariable;
+            minutes = heures = 0;
+
+            // On lie la variable "compteArebours" avec le dom.
+            // Si on modifie cette variable, le dom sera modifié automatiquement
+            valeurDuCompteArebours = document.getElementById('compteArebours');
+
+            //On lie une variable à l'id barre
+            var barreProgression = document.getElementById("barre");
+
+            //On lui donne une couleur bleu
+            barreProgression.classList.add("barreBleue");
+
+            //On enlève la classe "barreRouge"
+            barreProgression.classList.remove("barreRouge");
+
+            //Réinitialisation de la couleur de la barre de progression
+            valeurDuCompteArebours.style.color = "blue";
+
+            //Si "dureeVariable" vaut 0, on stop tout et on renvoie "true": compte à rebours stoppé.
+            if (dureeVariable < 0) {
+                document.getElementById("blocAffichageDeFin").style.display = "block";
+                return;
+            }
+            else {
+                //Conversion des secondes en h m s via la fonction convertisseurSecondesEnHMS() et envoie dans la page
+                valeurDuCompteArebours.innerHTML = convertisseurSecondesEnHMS(secondes);
+            }
+
+            //////////  PREPARATION DES DONNEES POUR LA BARRE       ////////////
+            //////////  DE PROGRESSION ET LES POUCENTAGES           ////////////
+            ////////////////////////////////////////////////////////////////////
+            //Calcul du pourcentage du temps écoulé par rapport à la durée totale
+            if (dureeTotale > 0)
+                //Calcul du temps écoulé pour la barre de progression
+                tempsEcoule = 100 - (dureeVariable / dureeTotale * 100);
+            else
+                //Si durée totale vaut 0, division impossible. On lui donne la valeur 100
+                tempsEcoule = 100;
+
+            //Si le temps écoulé fait moins de 1% on arrondit à deux chiffres après la virgule: tempsEcoule.toFixed(2)
+            if(tempsEcoule.toFixed(0) < 1)
+                tempsEcoule = tempsEcoule.toFixed(2);
+            else
+                //Sinon, on arrondis à 0 chiffres après la virgule: tempsEcoule.toFixed(0)
+                tempsEcoule = tempsEcoule.toFixed(0);
+
+            //Si le temps écoulé est inférieur ou égal à 100 on met à jour la barre de progression
+            if (tempsEcoule <= 100) {
+
+                //On met à jour la barre de progression
+                barreProgression.value = tempsEcoule;
+
+                //On met à jour la valeur du poucentage affiché (id=poucentage) à chaque seconde
+                var pourcentage = document.getElementById("pourcentage");
+                pourcentage.innerHTML = tempsEcoule + "%";
+
+                //Si le pourventage vaut 90%, le compte à rebours change de couleur.
+                if(tempsEcoule > 90){
+
+                    //Couleur pour la fin
+                    var endColor = "red";
+
+                    //Le temps a dépassé 90% du temps choisi: le compte à rebours devient rouge
+                    valeurDuCompteArebours.style.color = endColor;
+
+                    //On enlève la classe  "barreBleue"
+                    barreProgression.classList.remove("barreBleue");
+
+
+                    //Modification de la couleur de la barre de progression
+                    barreProgression.classList.add("barreRouge");
+                }
+            }
+
+            // COMPTE A REBOURS DECREMENTE
+            //On enlève une seconde à "dureeVariable"
+            dureeVariable -= 1;
+
+            /** on relance la fonction compteArebours() toute les 999 millisecondes
+            *   en envoyant la valeur de "dureeVariable"  et la durée totale sauvegardée
+            *   dans la fonction "compteArebours" */
+            timeout = setTimeout("compteArebours(" + dureeVariable + ", " + dureeTotale + "); ", 999);
+        }
+
+        /** POST-IT
+        *   Pour noter une tâche à faire
+        *   Si le textarea est vide la fonction n'enregistre rien
+        **/
+        function ecrireUnPostit(){
+            afficherBloc("blocPostitTextarea");
+            afficherBloc("postitTextarea");
+            afficherInline("boutonEnregistrementPostit");
+            afficherInline("boutonAnnulerPostit");
+            masquer("boutonEcrireUnPostit");
+			
+			document.getElementById("postitTextarea").focus();
+        }
+        function postitEnregistrement() {
+            //On récupère le texte du textarea et on l'incère dans une variable "textDuPostit"
+            var textDuPostit = document.getElementById("postitTextarea").value;
+            //Si la valeur est nulle on ne fait rien: on sort de la fonction
+            if (textDuPostit === "") return;
+            //On recopie le contenu du textarea dans le bloc html du postit
+            document.getElementById("postit").innerHTML = textDuPostit;
+            //On affiche le bloc du post-it
+            afficherBloc("blocPostit");
+            //On vide le textarea du post-it
+            document.getElementById("postitTextarea").value = "";
+            //On masque le textarea du postit et les boutons "boutonEcrireUnPostit" et "Enregistrer"
+            masquer("postitTextarea");
+            masquer("boutonEcrireUnPostit");
+            masquer("boutonEnregistrementPostit");
+            masquer("boutonAnnulerPostit");
+        }
+
+        /** effacerPostit()
+         *  HM - 2019-1-15
+         *  Fonction qui efface le post-it ***/
+        function effacerPostit() {
+            //On effacer le texte du postit
+            document.getElementById("postit").innerHTML = "";
+            //On masque le bloc "postit" et le bouton "Effacer"
+            masquer("blocPostit");
+            //On affiche le bouton "Ecrire un postit"
+            afficherInline("boutonEcrireUnPostit");
+        }
+        function annulerPostit(){
+            masquer("blocPostit");
+            masquer("postitTextarea");
+            masquer("boutonAnnulerPostit");
+            masquer("boutonEnregistrementPostit");
+            //On affiche le bouton "Ecrire un postit"
+            afficherInline("boutonEcrireUnPostit");
+
+        }
+
+        /** CONVERTISSEUR DE SECONDES EN HEURES, MINUTES, SECONDES
+         *  HM 2019-01-17
+         *  Pour afficher dans le titre la durée choisie au départ
+         *  Pour le compte à rebours
+         *
+         * */
+        function convertisseurSecondesEnHMS(dureeAconvertir, mode) {
+
+            //Les variables
+            var dureeConvertie;
+            var mesSecondes = dureeAconvertir;
+            mesMinutes = mesHeures = "";
+            mode = mode;
+            if (mesSecondes > 59) {
+
+                //La fonction Math.floor(x) renvoie le plus grand entier qui est inférieur ou égal à un nombre (5,05 -> 5)
+                //Ici on récupère un nombre entier de minutes
+                mesMinutes = Math.floor(mesSecondes / 60);
+
+                //on récupère le nombre de secondes qui restent
+                mesSecondes = mesSecondes - mesMinutes * 60;
+            }
+            // si on a plus de 59 minutes on les divise par 60 pour connaître le nombre d'heures
+            if (mesMinutes > 59) {
+                //La fonction Math.floor(x) renvoie le plus grand entier qui est inférieur ou égal à un nombre (5,05 -> 5)
+                //Ici on récupère un nombre entier d'heures
+                mesHeures = Math.floor(mesMinutes / 60);
+
+                //on récupère le nombre de minutes
+                mesMinutes = mesMinutes - mesHeures * 60;
+            }
+
+            //Si on a moins de 10 secondes, on écrit un 0 à côté de l'unité des secondes
+            if (mesSecondes < 10) { mesSecondes = "0" + mesSecondes; }
+
+            //Si on a moins de 10 minutes on écrit un 0 à côté de l'unité de minutes
+            if (mesMinutes < 10) { mesMinutes = "0" + mesMinutes; }
+
+            // Si on a moins d'une heure, on n'affiche que les minutes et les secondes
+            if(mesHeures < 1 && mode !== "lettres") mesHeures = "00";
+            if(mesMinutes < 1 && mode !== "lettres") mesMinutes = "00";
+            if (mesHeures > 0 && mode === "lettres" ) mesHeures = mesHeures + "h ";
+
+            //On demande le mode d'affichage
+            if (mode === "lettres") {
+                if(mesMinutes == "00" || mesMinutes == "0") mesMinutes = "";
+                else mesMinutes = mesMinutes + "mn ";
+                if(mesSecondes == "00") mesSecondes = "";
+                else mesSecondes = mesSecondes + "sec";
+                dureeConvertie = mesHeures + mesMinutes + mesSecondes;
+            } else {
+                dureeConvertie = mesHeures + ":" + mesMinutes + ":" + mesSecondes;
+            }
+            //On retourne le résultat
+            return dureeConvertie;
+
+        }
+
+
+        /////////////////////////////     OUTILS          /////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////////////////
+        /** Mise à zéro de la valeur d'un élément
+        *   Paramètre: id de l'élément
+        */
+        function miseAzero(id){
+            var element = document.getElementById(id);
+            element.value = 0;
+        }
+
+
+        /** afficherOuMasquerBloc(id)
+         *  HM: toggle qui affiche ou masque un bloc via un bouton dans la page
+         *  Source du code: tutoriel Js de W3school
+         *  2019-01-15
+         *  Paramètres: id du bloc envoyé par le bouton
+         *  Particularité: permet d'afficher ou effacer un bloc en lui envoyant simplement l'id
+         */
+        function afficherOuMasquerBloc(id) {
+            //Je récupère l'id envoyé par le bouton html
+            //Je crée une variable qui contiendra le bloc (dom)
+            var x = document.getElementById(id);
+            //Si le bloc n'est pas affiché (Css: display:none;) on l'affiche (display:block;)
+            if (x.style.display === "none") {
+                x.style.display = "block";
+                //Sinon (else), on le masque
+            } else {
+                x.style.display = "none";
+            }
+        }
+
+        /** afficherBloc(id)
+         *  Affiche simplement un bloc sans fermeture automatique
+         */
+        function afficherBloc(id) {
+            //Je récupère l'id envoyé par le bouton html
+            //Je crée une variable qui contiendra le bloc (dom)
+            var x = document.getElementById(id);
+            //Si le bloc n'est pas affiché (Css: display:none;) on l'affiche (display:block;)
+            x.style.display = "block";
+        }
+        /** afficherInline(id)
+         *  Affiche simplement un élément en ligne sans fermeture automatique
+         */
+        function afficherInline(id) {
+            //Je récupère l'id envoyé par le bouton html
+            //Je crée une variable qui contiendra la ligne (dom)
+            var x = document.getElementById(id);
+            //Si le bloc n'est pas affiché (Css: display:none;) on l'affiche (display:inline;)
+            if (x.style.display === "none") {
+                x.style.display = "inline";
+            }
+        }
+         /** masquer(id)
+         *  HM: masque un élément dans la page
+         *  Source du code: tutoriel Js de W3school
+         *  2019-01-15
+         *  Paramètres: id de l'élément envoyé
+         *  Particularité: permet d'effacer un élément en lui envoyant simplement l'id
+         */
+        function masquer(id) {
+            //Je récupère l'id envoyé
+            //Je crée une variable qui contiendra l'élément (dom)
+            var x = document.getElementById(id);
+            x.style.display = "none";
+        }
+
+        /** Horologe.js
+        *   Source: www.supportduweb.com/scripts_tutoriaux-code-source-10-afficher-l-039-heure-et-la-date-en-temps-reel.html
+        *   MAJ:2018-10-26 Marc
+        **/
+        function horloge(id) {
+            date = new Date;
+            annee = date.getFullYear();
+            moi = date.getMonth();
+            mois = new Array('Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre');
+            j = date.getDate();
+            jour = date.getDay();
+            jours = new Array('Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi');
+            heures = date.getHours();
+            if (heures < 10) {
+                heures = "0" + heures;
+            }
+            minutes = date.getMinutes();
+            if (minutes < 10) {
+                minutes = "0" + minutes;
+            }
+            secondes = date.getSeconds();
+            if (secondes < 10) {
+                secondes = "0" + secondes;
+            }
+            resultat = '' + jours[jour] + ' ' + j + ' ' + mois[moi] + ' ' + annee + ' - ' + heures + ':' + minutes + ':' + secondes + '';
+            document.getElementById(id).innerHTML = resultat;
+
+            //Renseignement des données du formulaire du choix de l'heure une seule fois grâce à un flag
+            if(horlogeFlag === false)
+                //Transmission des données dans le choix de l'heure id=choixHeure
+                document.getElementById("choixHeure").value = heures + ":" + minutes;
+            horlogeFlag = true; // On modifie le flag pour empêcher les modifications sauf si on actualise la page ou stop
+
+
+			
+
+			//Renseignement des variables globales si choix d'heure précise
+
+			heureActuelle = heures;
+
+			minutesActuelles = minutes;
+
+
+
+            setTimeout('horloge("' + id + '");', '1000');
+        }
+
+
+    </script>
+
+	
+
+	
+
+	
+
+    <style>
+
+        /** Pomodoro.css
+
+        * M.L. Harnist
+
+        * 2018-10-26 Perfectionné le 12-01-2019
+
+        * Note: id réservés à js
+
+        ***** Attention ***** les marges réduites pour responsive des petits mobiles *****/
+
+            body {
+
+                padding: 0 30px;
+
+                max-width: 500px;
+
+            }
+
+
+
+            h1 {color: blue;margin:0px;}
+
+
+
+            /* Bouton d'aide */
+
+            h1 button {float: right;}
+            h1 a {text-decoration:none;color:blue;}
+            h1 a:visited {color:blue;}
+
+
+
+
+
+            /* h2: Numéros du compteur et "Terminé" s'affiche quand le compte à rebours (décompteur) est terminé */
+
+            h2 {
+
+                font-size: 2em;
+
+                margin: 10px 0;
+
+                color: blue;
+                text-align:center;
+
+
+            }
+
+
+
+                h2 > button {
+
+                    font-size: 1em;
+
+                    margin-right: 20px;
+
+                    padding:20px;
+
+                    vertical-align: middle;
+
+                    color:white;
+
+                    border:none;
+
+                }
+
+            article {margin:20px;}
+
+
+
+
+            /* Bouton "Lancer" */
+
+            .boutonLancer {background-color:blue; display:inline;}
+
+            /* Police des paragraphes plus grande pour les petits mobiles */
+
+            p {
+
+                font-size: 1.2em;
+
+            }
+
+
+
+            /* Marge du compte à rebours (décompteur) */
+
+            .compteArebours {
+
+                margin-right: 20px;
+
+            }
+
+            .choixHeure {height:30px;font-size:1.5em;}
+            .boutonLancerChoixHeure {height:30px;font-size:1.5em;}
+
+
+
+            /* La section du bloc qui s'affiche quand le compte à rebours est à zéro */
+
+            #blocAffichageDeFin section {
+
+                background-color: white;
+
+                border-radius: 15px;
+
+                padding: 25px;
+
+            }
+
+
+
+            /* Bloc qui s'affiche quand le compte à rebours est à zéro */
+
+            .blocAffichageDeFin {
+
+                display: none;
+
+                position: absolute;
+
+                top: 0;
+
+                left: 10px;
+
+                background-color: red;
+
+                font-weight: bold;
+
+                padding: 12px;
+
+                margin: 20px 20px 20px 0;
+
+                border-radius: 23px;
+
+                max-width: 500px;
+
+            }
+
+
+
+                .blocAffichageDeFin h2 {
+
+                    margin: 0px;
+
+                }
+
+
+
+                .blocAffichageDeFin p {
+
+                    margin: 0px;
+
+                }
+
+
+
+                .blocAffichageDeFin button {
+
+                    margin-top: 10px;
+
+                }
+
+            /* Textarea pour enregistrer un post-it */
+
+            textarea {
+
+                width: 100%;
+
+                height: 50px;
+
+                margin: 0 10px 2px 0;
+
+            }
+
+
+
+            .blocPostit {
+
+                display: none;
+
+                border-radius: 10px;
+
+                padding: 10px;
+
+                margin-bottom: 10px;
+
+                background-color: yellow;
+
+            }
+            .blocPostit h3 {margin-top:0; margin-bottom:0;}
+
+
+
+
+            #boutonEffacerPostit {
+
+                margin: 10px 0;
+
+            }
+
+
+
+            /* Case "input" pour saisir une durée sur mesure */
+
+            .dureeVariable {
+
+                width: 40px;
+
+                text-align: right;
+
+                border-radius: 3px
+
+            }
+
+
+
+            /* Barre de progression du temps écoulé */
+
+            progress {
+
+                width: 100%;
+
+                height: 30px;
+
+            }
+
+            /* Barre de progression rouge */
+
+            .barreRouge{ background-color:red;}
+
+            .barreRouge[value] {color:red} /* IE10 */
+
+            .barreRouge::-webkit-progress-bar-value {background-color:red}
+
+            .barreRouge::-webkit-progress-value {background-color:red}
+
+            .barreRouge::-moz-progress-bar {background-color:red}
+
+
+
+            /* Barre de progression bleue */
+
+            .barreBleue{ background-color:blue;}
+
+            .barreBleue[value] {color:blue} /* IE10 */
+
+            .barreBleue::-webkit-progress-bar-value {background-color:blue}
+
+            .barreBleue::-webkit-progress-value {background-color:blue}
+
+            .barreBleue::-moz-progress-bar {background-color:blue}
+
+
+
+            /* Paragraphe qui contient le pourcentage */
+
+            .pourcentage {
+
+                text-align: center;
+
+                margin-top: -45px;
+
+            }
+
+
+
+            #pourcentage {
+
+                background-color: white;
+
+                padding: 2px;
+
+                border-radius: 2px;
+
+            }
+
+
+            .horloge { display:inline; float:left; }
+
+
+
+            /*Signature du webmaster avec un lien vers son site web*/
+
+            address {
+                display:inline;
+                float:right;
+
+
+                font-size: 0.8em;
+
+                margin: 10px 0 0 0;
+
+                text-align: right;
+
+            }
+
+
+
+                address a {
+
+                    color: grey;
+
+                }
+
+
+
+            /*Responsive*/
+
+            @media all and (max-device-width: 600px) {
+
+                /* Vos règles CSS pour les mobiles ici */
+
+                body {
+
+                    padding: 0px 5px 5px 5px;
+
+                    width: auto;
+
+                }
+
+            }
+
+             /* Ballon */
+
+            .move {
+
+                position:relative;
+
+                z-index: 90;
+
+                transform: translate(0,0);
+
+                animation: moving 24s ease-in-out 0s infinite;
+
+                width:200px;
+
+                height: 0px;
+
+            }
+
+            @keyframes moving {
+
+                0% { transform: translate(181px,-216px);}
+
+                50% { transform: translate(120px,-500px);}
+
+                100% { transform: translate(-10px,-750px);}
+
+            }
+
+
+
+            /* Théorie */
+
+            .classOfAnimation {
+
+                animation: nameOfAnimation 1s ease-in-out 0s infinite;
+
+            }
+
+            @keyframes nameOfAnimation {
+
+              /*  %  { action: translate(left, top) ;} */
+
+
+
+                0% {tansform: translate(1px, 0px);}
+
+                50% {tansform: translate(500px, -50px);}
+
+                100% {transform: translate(-10px, -100px);}
+
+            }
+
+
+
+
+
+    </style>
+
+</head>
+
+
+
+<body>
+
+
+
+    <h1><a href="pomodoro.html" title="Actualiser la page">Pomodoro</a> <span id="dureeChoisie"> de 25mn</span> <button title="Aide et définition" id="boutonAide" onclick="afficherOuMasquerBloc('aide')">?</button></h1>
+
+    <!--Aide de l'application. Elle est activée par un bouton "?" dans le titre h1 ci-dessus -->
+
+    <article id="aide" style="display:none;" onclick='masquer("aide")'>
+
+        <ul>
+
+            <li>On peut choisir n'importe quelle durée</li>
+
+            <li>On peut écrire un post-it (pense-bête), tâche à accomplir</li>
+
+            <li>Vous pouvez venir boire un café chez moi.</li>
+
+        </ul>
+
+        <h3>Définition de la technique du Pomodoro</h3>
+
+        <p>La méthode Pomodoro doit son nom au minuteur de cuisine en forme de tomate (pomodoro en italien) qui a été le premier utilisé par le créateur de cette méthode, Francesco Cirillo, lorsqu'il était étudiant à l'université.</p>
+
+        <p>La technique Pomodoro est une technique de gestion du temps qui se base sur l'utilisation d'un minuteur, sur des périodes de 25 minutes appelées pomodori, séparées par de courtes pauses. La méthode a pour principale prétention que des pauses régulières favorisent l'agilité intellectuelle (imitation "méthode agile"). Les temps de repos permettent de consolider la mémoire.</p>
+
+        <h3>Les étapes</h3>
+
+        <ul>
+            <li>décider de la tâche à effectuer</li>
+            <li>régler le pomodoro (minuteur) sur 25 minutes</li>
+            <li>travailler sur la tâche jusqu'à ce que le minuteur sonne et la noter comme faite</li>
+            <li>prendre une courte pause (5 minutes)</li>
+            <li>tous les quatre pomodori prendre une pause un peu plus longue (15-20 minutes)</li>
+        </ul>
+
+        <p><strong>Le suivi, l'enregistrement, le traitement et la visualisation</strong> sont fondamentales pour cette technique. Dans l'étape de planification, les tâches sont classées en les notant dans une liste des choses à faire aujourd'hui. Ceci permet à l'utilisateur d'estimer la quantité de travail à fournir pour chaque tâche. Lorsqu'un pomodoro est terminé, on garde une trace de ce qui a été fait, permettant ainsi de voir l'avancée du travail et de fournir des données brutes pour une future auto-critique et amélioration. Dans le cadre de cette méthode, pomodoro est une période indivisible de 25 minutes. Un des buts principaux de cette technique est de <strong>supprimer les interruptions de travail</strong> dues à soi-même ou aux autres. Ceci est permis par l'enregistrement et le report d'activité interrompant le pomodoro1.<p>
+
+        <p>Le ressort de cette technique provient du déplacement de la gratification psychologique obtenue non plus de ce qu'on a produit ou appris mais du respect des temps de concentration ou du nombre de Pomodoros effectués dans la journée.</p>
+
+        <p>La méthode originale propose une approche se basant sur un minuteur mécanique, un papier et un crayon. Pour l'auteur, l'acte de régler le minuteur conforte l'utilisateur dans sa détermination à commencer la tâche. Le « tic-tac » et la sonnerie permettent de signifier le conditionnement du temps à la technique1. Néanmoins, la méthode a inspiré un grand nombre de logiciels pour différentes architectures6, peut-être à cause du suivi de cette méthode de travail par les développeurs[réf. nécessaire].</p>
+        <p><a href="https://fr.wikipedia.org/wiki/Technique_Pomodoro" title="source" target="_blank">Source: Wikipedia, la technique du Pomodoro</a></p>
+        <p><button onclick="masquer('aide')">Fermer l'aide</button></p>
+
+    </article>
+
+
+
+    <!--BOUTON DE LANCEMENT DE L'APPLICATION - AFFICHAGE DU COMPTE A REBOURS -->
+
+    <h2><span class="compteArebours" id="compteArebours"></span></h2>
+    <h2><button class="boutonLancer" id="boutonLancer" onclick="start('dureeVariable')">Lancer</button> <button style="display:none;" class="stop" id="boutonStop" onclick="stop()">Stop</button></h2>
+
+
+
+    <!--BARRE DE PROGRESSION DU TEMPS ECOULE-->
+
+    <p><progress id="barre" value="0" max="100"></progress></p>
+
+    <p class="pourcentage"><span id="pourcentage"></span></p>
+
+
+
+    <!-- L'utilisateur peut choisir sa propre durée. Une fois sa durée saisie, il peut lancer le compte à rebours. -->
+
+    <p>Choisir une durée: <input value="25" onfocus="this.value=''" class="dureeVariable" id="dureeVariable"> minutes.</p>
+
+    <p>Choisir une heure: <input type="time" class="choixHeure" id="choixHeure"></p>
+
+
+
+    <!-- Bloc (div) qui ne s'affiche qu'à la fin du compte à rebours. -->
+
+    <div id="blocAffichageDeFin" class="blocAffichageDeFin">
+
+        <section>
+
+            <h2>Terminé!</h2>
+
+            <p>
+
+                Notez ce que vous avez fait ou découvert dans le journal de bord.<br>
+
+                <button type="button" onclick='masquer("blocAffichageDeFin");'>Fermer</button>
+
+            </p>
+
+        </section>
+
+    </div>
+
+    <!-- /////////////////  POST-IT //////////////////////////// -->
+    <!-- /////////////////////////////////////////////////////// -->
+    <div id="blocPostit" class="blocPostit" style="display:none;">
+
+        <h3>Post-it</h3>
+
+        <div id="postit">
+
+            <!--Ici s'écrira la post-it-->
+
+        </div>
+
+        <button id="boutonEffacerPostit" onclick="effacerPostit()">Effacer</button>
+
+    </div>
+
+
+    <p><button id="boutonEcrireUnPostit" onclick='ecrireUnPostit()'>Ecrire un postit</button>
+        <div id="blocPostitTextarea" style="display:none;"><textarea id="postitTextarea" placeholder="Ecrire un post-it">
